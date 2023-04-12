@@ -15,8 +15,8 @@ from diffusion import sample_from_model, sample_posterior, \
 from DWT_IDWT.DWT_IDWT_layer import DWT_2D, IDWT_2D
 from pytorch_wavelets import DWTForward, DWTInverse
 from torch.multiprocessing import Process
-from utils import init_processes, copy_source, broadcast_params
-
+from utils import init_processes, copy_source, broadcast_params, proj_path
+from tqdm import tqdm
 
 def grad_penalty_call(args, D_real, x_t):
     grad_real = torch.autograd.grad(
@@ -105,7 +105,8 @@ def train(rank, gpu, args):
     num_levels = int(np.log2(args.ori_image_size // args.current_resolution))
 
     exp = args.exp
-    parent_dir = "./saved_info/wdd_gan/{}".format(args.dataset)
+    parent_dir = f"{proj_path}/{args.save_dir}/wdd_gan/{args.dataset}"
+    os.makedirs(parent_dir, exist_ok=True)
 
     exp_path = os.path.join(parent_dir, exp)
     if rank == 0:
@@ -141,8 +142,9 @@ def train(rank, gpu, args):
 
     for epoch in range(init_epoch, args.num_epoch + 1):
         train_sampler.set_epoch(epoch)
+        print(f'Train epoch: {epoch}')
 
-        for iteration, (x, y) in enumerate(data_loader):
+        for iteration, (x, y) in tqdm(enumerate(data_loader)):
             for p in netD.parameters():
                 p.requires_grad = True
             netD.zero_grad()
@@ -224,15 +226,17 @@ def train(rank, gpu, args):
             if args.rec_loss:
                 rec_loss = F.l1_loss(x_0_predict, real_data)
                 errG = errG + rec_loss
+            else:
+                rec_loss = None
 
             errG.backward()
             optimizerG.step()
 
             global_step += 1
-            if iteration % 100 == 0:
+            if iteration % 25 == 0:
                 if rank == 0:
-                    print('epoch {} iteration{}, G Loss: {}, D Loss: {}'.format(
-                        epoch, iteration, errG.item(), errD.item()))
+                    print(f'epoch {epoch} iteration{iteration}, G Loss: {errG.item()}, rec_loss:{rec_loss.item()} '
+                          f'D Loss: {errD.item()}')
 
         if not args.no_lr_decay:
 
@@ -242,8 +246,9 @@ def train(rank, gpu, args):
         if rank == 0:
             if epoch % 10 == 0:
                 x_pos_sample = x_pos_sample[:, :3]
-                torchvision.utils.save_image(x_pos_sample, os.path.join(
-                    exp_path, 'xpos_epoch_{}.png'.format(epoch)), normalize=True)
+                file_name = os.path.join(exp_path, f'xpos_epoch_{epoch}.png')
+                print(f'Save train images in {file_name}')
+                torchvision.utils.save_image(x_pos_sample, file_name, normalize=True)
 
             x_t_1 = torch.randn_like(real_data)
             fake_sample = sample_from_model(
@@ -416,6 +421,8 @@ if __name__ == '__main__':
                         help='port for master')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='num_workers')
+    parser.add_argument('--save_dir', type=str,
+                        help='save dir trained models')
 
     args = parser.parse_args()
 

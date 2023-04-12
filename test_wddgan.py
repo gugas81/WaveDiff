@@ -11,7 +11,8 @@ from DWT_IDWT.DWT_IDWT_layer import IDWT_2D
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from pytorch_wavelets import DWTInverse
 from score_sde.models.ncsnpp_generator_adagn import NCSNpp, WaveletNCSNpp
-
+from utils import proj_path
+from tqdm import tqdm
 
 # %%
 def sample_and_test(args):
@@ -39,8 +40,8 @@ def sample_and_test(args):
     print("GEN: {}".format(gen_net))
 
     netG = gen_net(args).to(device)
-    ckpt = torch.load('./saved_info/wdd_gan/{}/{}/netG_{}.pth'.format(
-        args.dataset, args.exp, args.epoch_id), map_location=device)
+    ckpt = torch.load(f'{proj_path}/saved_info/wdd_gan/{args.dataset}/netG_{args.epoch_id}.pth',
+                      map_location=device)
 
     # loading weights from ddp in single gpu
     for key in list(ckpt.keys()):
@@ -59,9 +60,8 @@ def sample_and_test(args):
 
     iters_needed = 50000 // args.batch_size
 
-    save_dir = "./wddgan_generated_samples/{}".format(args.dataset)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    save_dir = f"{proj_path}/wddgan_generated_samples/{args.dataset}"
+    os.makedirs(save_dir, exist_ok=True)
 
     if args.measure_time:
         x_t_1 = torch.randn(args.batch_size, args.num_channels,
@@ -96,7 +96,7 @@ def sample_and_test(args):
         exit(0)
 
     if args.compute_fid:
-        for i in range(iters_needed):
+        for i in tqdm(range(iters_needed)):
             with torch.no_grad():
                 x_t_1 = torch.randn(
                     args.batch_size, args.num_channels, args.image_size, args.image_size).to(device)
@@ -116,7 +116,7 @@ def sample_and_test(args):
                 for j, x in enumerate(fake_sample):
                     index = i * args.batch_size + j
                     torchvision.utils.save_image(
-                        x, '{}/{}.jpg'.format(save_dir, index))
+                        x, f'{save_dir}/{index}.jpg')
                 print('generating batch ', i)
 
         paths = [save_dir, real_img_dir]
@@ -141,9 +141,10 @@ def sample_and_test(args):
         fake_sample = torch.clamp(fake_sample, -1, 1)
 
         fake_sample = to_range_0_1(fake_sample)  # 0-1
-        torchvision.utils.save_image(
-            fake_sample, './samples_{}.jpg'.format(args.dataset), nrow=8, padding=0)
-        print("Results are saved at samples_{}.jpg".format(args.dataset))
+        save_gen_img = os.path.join(f'{save_dir}', f'samples_{args.dataset}.jpg')
+        os.makedirs(os.path.dirname(save_gen_img), exist_ok=True)
+        torchvision.utils.save_image(fake_sample, save_gen_img, nrow=8, padding=0)
+        print(f"Results are saved at samples_{save_gen_img}.jpg")
 
 
 if __name__ == '__main__':

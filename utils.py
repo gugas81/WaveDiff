@@ -4,6 +4,7 @@ import shutil
 import torch
 import torch.distributed as dist
 
+proj_path = os.path.dirname(__file__)
 
 def copy_source(file, output_dir):
     shutil.copyfile(file, os.path.join(output_dir, os.path.basename(file)))

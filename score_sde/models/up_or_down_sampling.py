@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from score_sde.op import upfirdn2d
+from WaveDiff.score_sde.op import upfirdn2d
 
 
 # Function ported from StyleGAN2
@@ -258,5 +259,8 @@ def downsample_2d(x, k=None, factor=2, gain=1):
         k = [1] * factor
     k = _setup_kernel(k) * gain
     p = k.shape[0] - factor
+    pad = ((p + 1) // 2, p // 2)
+    # up_x, up_y, down_x, down_y, pad_x0, pad_x1, pad_y0, pad_y1
+    #down=factor, pad=((p + 1) // 2, p // 2)
     return upfirdn2d(x, torch.tensor(k, device=x.device),
-                     down=factor, pad=((p + 1) // 2, p // 2))
+                     down=factor, padding=pad)
